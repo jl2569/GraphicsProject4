@@ -20,6 +20,9 @@ typedef struct {
     struct {	
       double center[3];
       double radius;
+	  double reflectivity;
+	  double refractivity;
+	  double ior;
     } sphere;
     struct {
 	  double center[3];
@@ -288,6 +291,25 @@ Object** valuesetter(int type,char* key ,double value,Object** objects,int eleme
 		if ((strcmp(key, "radius") == 0)){
 			objects[elements]->sphere.radius = value;
 			return objects;
+		}else if ((strcmp(key, "ior") == 0)){
+			objects[elements]->sphere.ior = value;
+			return objects;
+		}else if ((strcmp(key, "reflectivity") == 0)){
+			if (value >1 || value < 0){
+				fprintf(stderr,"Error:value in reflectivity for sphere is not inbetween 0 and 1\n");
+				exit(1);
+			}else{
+				objects[elements]->sphere.reflectivity = value;
+				return objects;
+			}
+		}else if ((strcmp(key, "refractivity") == 0)){
+			if (value >1 || value < 0){
+				fprintf(stderr,"Error:value in refractivity for sphere is not inbetween 0 and 1\n");
+				exit(1);
+			}else{
+				objects[elements]->sphere.refractivity = value;
+				return objects;
+			}
 		}else{
 			fprintf(stderr,"Error:sphere does not support %s\n",key);
 			exit(1);
@@ -525,7 +547,10 @@ Object** read_scene(char* filename , Object** objects) {
 	      (strcmp(key, "radial-a1") == 0) ||
 	      (strcmp(key, "radial-a2") == 0) ||
 	      (strcmp(key, "angular-a0") == 0) ||
-		  (strcmp(key, "theta") == 0) ) {
+		  (strcmp(key, "theta") == 0) ||
+		  (strcmp(key, "reflectivity") == 0) ||
+		  (strcmp(key, "refractivity") == 0) ||
+		  (strcmp(key, "ior") == 0) ) {
 	    double value = next_number(json);
 		valuesetter(type, key,value, objects,elements);
 	  } else if ((strcmp(key, "color") == 0) ||
