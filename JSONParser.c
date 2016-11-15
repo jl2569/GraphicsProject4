@@ -27,6 +27,9 @@ typedef struct {
     struct {
 	  double center[3];
       double normal[3];
+	  double reflectivity;
+	  double refractivity;
+	  double ior;
     } plane;
 	struct {
 	  double center[3];
@@ -103,13 +106,13 @@ double* diffuse(double* N, double* L ,double* light ,Object* object,double* fina
 		final[1] = 0;
 		final [2] = 0;
 		return final;
-	} else{
+	}else{
 		final[0] = (object->diffuse_color[0]*light[0])*test;
 		final[1] = (object->diffuse_color[1]*light[1])*test;
 		final[2] = (object->diffuse_color[2]*light[2])*test;
 		return final;
 	}
-	}
+}
 // function that determines the specular reflection
 double* specular(double* R, double* V ,double* N, double* L ,double* light ,Object* object ,double* final){
 	
@@ -312,6 +315,30 @@ Object** valuesetter(int type,char* key ,double value,Object** objects,int eleme
 			}
 		}else{
 			fprintf(stderr,"Error:sphere does not support %s\n",key);
+			exit(1);
+		}
+	}else if (type == 2) {
+		if ((strcmp(key, "ior") == 0)){
+			objects[elements]->plane.ior = value;
+			return objects;
+		}else if ((strcmp(key, "reflectivity") == 0)){
+			if (value >1 || value < 0){
+				fprintf(stderr,"Error:value in reflectivity for plane is not inbetween 0 and 1\n");
+				exit(1);
+			}else{
+				objects[elements]->plane.reflectivity = value;
+				return objects;
+			}
+		}else if ((strcmp(key, "refractivity") == 0)){
+			if (value >1 || value < 0){
+				fprintf(stderr,"Error:value in refractivity for plane is not inbetween 0 and 1\n");
+				exit(1);
+			}else{
+				objects[elements]->plane.refractivity = value;
+				return objects;
+			}
+		}else{
+			fprintf(stderr,"Error:plane does not support %s\n",key);
 			exit(1);
 		}
 	}else if (type == 3) {
@@ -589,6 +616,160 @@ Object** read_scene(char* filename , Object** objects) {
   }
 }
 
+double* raytrace(double* Ro, double* Rd, Object** objects , int level,int find){
+	double best_t = INFINITY;
+	double t = 0;
+	int closest_object = -1 ;
+	double* color = malloc(sizeof(double)*3);
+    color[0] = 0; // ambient_color[0];
+    color[1] = 0; // ambient_color[1];
+    color[2] = 0; // ambient_color[2];
+	if (level >= 7){
+		return color;
+	}
+    for (int i=0; i<find; i += 1) {
+		switch(objects[i]->kind){	
+		case 0:
+			t = plane_intersection(Ro, Rd,
+				    objects[i]->plane.center,
+				    objects[i]->plane.normal);
+			break;
+		case 1:
+			if(objects[i]->sphere.radius == 0){
+				t = sphere_intersection(Ro, Rd,
+					objects[i]->sphere.center,
+					1);
+			}else{
+			t = sphere_intersection(Ro, Rd,
+					objects[i]->sphere.center,
+					objects[i]->sphere.radius);
+			}
+			break;
+		case 2:
+			break;
+		case 3:
+			break;
+		default:
+			// Horrible error
+			exit(1);
+		}
+		if (t > 0 && t < best_t) {
+			best_t = t;
+			closest_object = i;
+			
+		}
+      }
+	if(closest_object > -1 && best_t > 0 && best_t < INFINITY){
+		int hold = 0; 
+		Object** light;
+		light = malloc(sizeof(Object*)*2);
+		for(int k = 0; k < find ; k++){
+			if (strcmp(objects[k]->name , "light")==0){
+				light[hold] = objects[k];
+				hold += 1;
+			}
+		}
+		for (int j=0; j < hold; j++) {
+		// Shadow test
+			double Ron[3] = {(best_t * Rd[0]) + Ro[0],
+				(best_t * Rd[1]) + Ro[1],
+				(best_t * Rd[2]) + Ro[2]
+				};
+			double Rdn[3] = {light[j]->light.center[0] - Ron[0],
+				light[j]->light.center[1] - Ron[1],
+				light[j]->light.center[2] - Ron[2]
+				};
+			normalize(Rdn);
+			double light_distance = distance(Ron , light[j]->light.center);
+			int shadow =0;
+	
+			for (int k=0; k<find; k ++) {
+	 
+				if (objects[k]->name == objects[closest_object]->name) continue;
+				double g = -1;
+				switch(objects[k]->kind)  {	
+				case 0:
+					g = plane_intersection(Ron, Rdn,
+						objects[k]->plane.center,
+						objects[k]->plane.normal);
+					break;
+				case 1:
+					if(objects[k]->sphere.radius == 0){
+						g = sphere_intersection(Ron, Rdn,
+							objects[k]->sphere.center,
+							1);
+					}else{
+						g = sphere_intersection(Ron, Rdn,
+							objects[k]->sphere.center,
+							objects[k]->sphere.radius);
+					}
+					break;
+				case 2:
+					break;
+				case 3:
+					break;
+				default:
+					break;
+			}	
+			if ((g < light_distance) && (g >0)) {
+				shadow = 1;
+				break;
+			}
+		}
+		if ((shadow == 0) && (closest_object >=0) ) {
+	// N, L, R, V
+			double N[3];
+			double reflec;
+			double refract;
+			double ior;
+			if (strcmp(objects[closest_object]->name,"plane") == 0){
+				N[0] = objects[closest_object]->plane.normal[0];
+				N[1] =	objects[closest_object]->plane.normal[1];
+				N[2] =	objects[closest_object]->plane.normal[2];
+				reflec =  objects[closest_object]->plane.reflectivity;
+				refract =  objects[closest_object]->plane.refractivity;
+				ior =  objects[closest_object]->plane.ior;
+		// plane
+			}else if(strcmp(objects[closest_object]->name,"sphere") == 0){
+				N[0] = Ron[0] - objects[closest_object]->sphere.center[0];
+				N[1] = Ron[1] - objects[closest_object]->sphere.center[1];
+				N[2] = Ron[2] - objects[closest_object]->sphere.center[2];
+				reflec =  objects[closest_object]->sphere.reflectivity;
+				refract =  objects[closest_object]->sphere.refractivity;
+				ior =  objects[closest_object]->sphere.ior;
+	// sphere
+			}
+	
+			double* L = Rdn; // light_position - Ron;
+			normalize(N);
+			double R[3];  
+			reflect(N,Rdn,R);
+			//normalize(R);
+			double V[3] = {Rd[0]-.5,
+				Rd[1]-1.5,
+				Rd[2]-.5};
+			double diffusevect[3];
+			double specularvect[3];
+			normalize(V);
+			diffuse(N,L,light[j]->color,objects[closest_object],diffusevect);
+			specular(R,V,N,L,light[j]->color,objects[closest_object],specularvect);
+			color[0] += frad(light[j], light_distance) * fang(light[j],Rdn) * (diffusevect[0] + specularvect[0]);
+			color[1] += frad(light[j], light_distance) * fang(light[j],Rdn) * (diffusevect[1] + specularvect[1]);
+			color[2] += frad(light[j], light_distance) * fang(light[j],Rdn) * (diffusevect[2] + specularvect[2]);
+		
+			if (reflec > 0){
+				double* reflecolor = raytrace(Ron, R, objects, level+1, find);		
+				color[0] = color[0] + reflecolor[0] * reflec;
+				color[1] = color[1] + reflecolor[1] * reflec;
+				color[2] = color[2] + reflecolor[2] * reflec;
+			}
+		
+		}
+	}
+ }
+ return color;
+}
+
 int main(int argc, char *argv[] ) {
   if(argc <= 4){
 	fprintf(stderr, "Error: # of Arguments do not match number required.\n");
@@ -646,154 +827,24 @@ int main(int argc, char *argv[] ) {
 	cy - (h/2) + pixheight * (y + 0.5),
 	1
       };
-      normalize(Rd);
-
-      double best_t = INFINITY;
-	  double t = 0;
-	  int closest_object = 2 ;
-      for (int i=0; i<find; i += 1) {
-		
-		switch(objects[i]->kind) {	
-		case 0:
-			t = plane_intersection(Ro, Rd,
-				    objects[i]->plane.center,
-				    objects[i]->plane.normal);
-			break;
-		case 1:
-			if(objects[i]->sphere.radius == 0){
-				t = sphere_intersection(Ro, Rd,
-					objects[i]->sphere.center,
-					1);
-			}else{
-			t = sphere_intersection(Ro, Rd,
-					objects[i]->sphere.center,
-					objects[i]->sphere.radius);
-			}
-			break;
-		case 2:
-			break;
-		case 3:
-			break;
-		default:
-			// Horrible error
-			exit(1);
+		normalize(Rd);
+		double* color = raytrace(Ro,Rd,objects,0,find);
+		if (color[0] != 0 || color[1] != 0 || color[2] != 0){ 
+			double temp;
+			char word[1000];
+			temp= color[0] *255;
+			sprintf(word,"%lf ",clamp(temp));
+			fputs(word,fp);
+			temp= color[1] *255;
+			sprintf(word," %lf ",clamp(temp));
+			fputs(word,fp);
+			temp= color[2] *255;
+			sprintf(word,"%lf\n",clamp(temp));
+			fputs(word,fp);
+		}else{
+			fputs("0 0 0\n",fp);
 		}
-		if (t > 0 && t < best_t) {
-			best_t = t;
-			closest_object = i;
-			
-		}
-      }
-	int hold = 0; 
-	Object** light;
-	light = malloc(sizeof(Object*)*2);
-	for(int k = 0; k < find ; k++){
-		if (strcmp(objects[k]->name , "light")==0){
-			light[hold] = objects[k];
-			hold += 1;
-		}
-	}
-	double* color = malloc(sizeof(double)*3);
-    color[0] = 0; // ambient_color[0];
-    color[1] = 0; // ambient_color[1];
-    color[2] = 0; // ambient_color[2];
-    for (int j=0; j < hold; j++) {
-      // Shadow test
-      double Ron[3] = {(best_t * Rd[0]) + Ro[0],
-		  (best_t * Rd[1]) + Ro[1],
-		  (best_t * Rd[2]) + Ro[2]
-	  };
-      double Rdn[3] = {light[j]->light.center[0] - Ron[0],
-		light[j]->light.center[1] - Ron[1],
-		light[j]->light.center[2] - Ron[2]
-	  };
-	normalize(Rdn);
-	double light_distance = distance(Ron , light[j]->light.center);
-    int shadow =0;
-	
-    for (int k=0; k<find; k ++) {
-	 
-		if (objects[k]->name == objects[closest_object]->name) continue;
-		double g = -1;
-		switch(objects[k]->kind)  {	
-			case 0:
-				g = plane_intersection(Ron, Rdn,
-				    objects[k]->plane.center,
-				    objects[k]->plane.normal);
-				break;
-			case 1:
-				if(objects[k]->sphere.radius == 0){
-					g = sphere_intersection(Ron, Rdn,
-						objects[k]->sphere.center,
-						1);
-				}else{
-					g = sphere_intersection(Ron, Rdn,
-						objects[k]->sphere.center,
-						objects[k]->sphere.radius);
-				}
-				break;
-			case 2:
-				break;
-			case 3:
-				break;
-			default:
-				break;
-		}	
-		if ((g < light_distance) && (g >0)) {
-			shadow = 1;
-			break;
-		}
-   }
-    if ((shadow == 0) && (closest_object >=0) ) {
-	// N, L, R, V
-		double N[3];
-		if (strcmp(objects[closest_object]->name,"plane") == 0){
-			N[0] = objects[closest_object]->plane.normal[0];
-			N[1] =	objects[closest_object]->plane.normal[1];
-			N[2] =	objects[closest_object]->plane.normal[2];
-		// plane
-		}else if(strcmp(objects[closest_object]->name,"sphere") == 0){
-			N[0] = Ron[0] - objects[closest_object]->sphere.center[0];
-			N[1] = Ron[1] - objects[closest_object]->sphere.center[1];
-			N[2] = Ron[2] - objects[closest_object]->sphere.center[2];
-	// sphere
-		}
-	
-		double* L = Rdn; // light_position - Ron;
-		normalize(N);
-		double R[3];  
-		reflect(N,Rdn,R);
-		//normalize(R);
-		double V[3] = {Rd[0]-.5,
-		Rd[1]-1.5,
-		Rd[2]-.5};
-		double diffusevect[3];
-		double specularvect[3];
-		normalize(V);
-		diffuse(N,L,light[j]->color,objects[closest_object],diffusevect);
-		specular(R,V,N,L,light[j]->color,objects[closest_object],specularvect);
-		color[0] += frad(light[j], light_distance) * fang(light[j],Rdn) * (diffusevect[0] + specularvect[0]);
-		color[1] += frad(light[j], light_distance) * fang(light[j],Rdn) * (diffusevect[1] + specularvect[1]);
-		color[2] += frad(light[j], light_distance) * fang(light[j],Rdn) * (diffusevect[2] + specularvect[2]);
-    }
- }
-    // The color has now been calculated
-	if (best_t > 0 && best_t != INFINITY) {
-    double temp;
-		char word[1000];
-		temp= color[0] *255;
-		sprintf(word,"%lf ",clamp(temp));
-		fputs(word,fp);
-		temp= color[1] *255;
-		sprintf(word," %lf ",clamp(temp));
-		fputs(word,fp);
-		temp= color[2] *255;
-		sprintf(word,"%lf\n",clamp(temp));
-		fputs(word,fp);
-	}else{
-		fputs("0 0 0\n",fp);
-	}
-		
+		free(color);
     }
     //printf("\n");
   }
