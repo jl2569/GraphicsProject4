@@ -624,7 +624,10 @@ double* raytrace(double* Ro, double* Rd, Object** objects , int level,int find){
     color[0] = 0; // ambient_color[0];
     color[1] = 0; // ambient_color[1];
     color[2] = 0; // ambient_color[2];
-	if (level >= 7){
+	Ro[0] = Ro[0]*.001 *Rd[0] ;
+	Ro[1] = Ro[1]*.001 *Rd[1] ;
+	Ro[2] = Ro[2]*.001 *Rd[2] ;	
+	if (level > 7){
 		return color;
 	}
     for (int i=0; i<find; i += 1) {
@@ -682,7 +685,6 @@ double* raytrace(double* Ro, double* Rd, Object** objects , int level,int find){
 			normalize(Rdn);
 			double light_distance = distance(Ron , light[j]->light.center);
 			int shadow =0;
-	
 			for (int k=0; k<find; k ++) {
 	 
 				if (objects[k]->name == objects[closest_object]->name) continue;
@@ -716,7 +718,7 @@ double* raytrace(double* Ro, double* Rd, Object** objects , int level,int find){
 				break;
 			}
 		}
-		if ((shadow == 0) && (closest_object >=0) ) {
+		if ((shadow == 0) && (closest_object >=0)) {
 	// N, L, R, V
 			double N[3];
 			double reflec;
@@ -728,16 +730,24 @@ double* raytrace(double* Ro, double* Rd, Object** objects , int level,int find){
 				N[2] =	objects[closest_object]->plane.normal[2];
 				reflec =  objects[closest_object]->plane.reflectivity;
 				refract =  objects[closest_object]->plane.refractivity;
-				ior =  objects[closest_object]->plane.ior;
-		// plane
+				if(objects[closest_object]->plane.ior != 0){
+					ior =  objects[closest_object]->plane.ior;
+				}else{
+					ior = 1;
+				}
+			// plane
 			}else if(strcmp(objects[closest_object]->name,"sphere") == 0){
 				N[0] = Ron[0] - objects[closest_object]->sphere.center[0];
 				N[1] = Ron[1] - objects[closest_object]->sphere.center[1];
 				N[2] = Ron[2] - objects[closest_object]->sphere.center[2];
 				reflec =  objects[closest_object]->sphere.reflectivity;
 				refract =  objects[closest_object]->sphere.refractivity;
-				ior =  objects[closest_object]->sphere.ior;
-	// sphere
+				if(objects[closest_object]->sphere.ior != 0){
+					ior =  objects[closest_object]->sphere.ior;
+				}else{
+					ior = 1;
+				}
+			// sphere
 			}
 	
 			double* L = Rdn; // light_position - Ron;
@@ -758,12 +768,19 @@ double* raytrace(double* Ro, double* Rd, Object** objects , int level,int find){
 			color[2] += frad(light[j], light_distance) * fang(light[j],Rdn) * (diffusevect[2] + specularvect[2]);
 		
 			if (reflec > 0){
-				double* reflecolor = raytrace(Ron, R, objects, level+1, find);		
-				color[0] = color[0] + reflecolor[0] * reflec;
-				color[1] = color[1] + reflecolor[1] * reflec;
-				color[2] = color[2] + reflecolor[2] * reflec;
+				double reflectangle[3] = {
+				(V[0] - 2*(V[0]*N[0] + V[1]*N[1] + V[2]*N[2])*N[0])* reflec,
+				(V[1] - 2*(V[0]*N[0] + V[1]*N[1] + V[2]*N[2])*N[1])* reflec,
+				(V[2] - 2*(V[0]*N[0] + V[1]*N[1] + V[2]*N[2])*N[2])* reflec};
+				double* reflecolor = raytrace(Ron, reflectangle, objects, level+1, find);		
+				color[0] += reflecolor[0];
+				color[1] += reflecolor[1];
+				color[2] += reflecolor[2];
 			}
-		
+		// default values  reflectivity = 0 , refractivity = 0 , ior = 1 
+		// shadow code keep it the same it is fine
+		// any random dots in image is a precison error offset vector R0' = Ro epsilon *Rd ; epsilon= .01
+		// angle of reflection is new rd  
 		}
 	}
  }
