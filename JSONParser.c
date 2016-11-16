@@ -624,9 +624,6 @@ double* raytrace(double* Ro, double* Rd, Object** objects , int level,int find){
     color[0] = 0; // ambient_color[0];
     color[1] = 0; // ambient_color[1];
     color[2] = 0; // ambient_color[2];
-	Ro[0] = Ro[0]*.001 *Rd[0] ;
-	Ro[1] = Ro[1]*.001 *Rd[1] ;
-	Ro[2] = Ro[2]*.001 *Rd[2] ;	
 	if (level > 7){
 		return color;
 	}
@@ -672,12 +669,12 @@ double* raytrace(double* Ro, double* Rd, Object** objects , int level,int find){
 				hold += 1;
 			}
 		}
+		double Ron[3] = {(best_t * Rd[0]) + Ro[0]+.01,
+			(best_t * Rd[1]) + Ro[1]+.01,
+			(best_t * Rd[2]) + Ro[2]+.01
+			};
 		for (int j=0; j < hold; j++) {
 		// Shadow test
-			double Ron[3] = {(best_t * Rd[0]) + Ro[0],
-				(best_t * Rd[1]) + Ro[1],
-				(best_t * Rd[2]) + Ro[2]
-				};
 			double Rdn[3] = {light[j]->light.center[0] - Ron[0],
 				light[j]->light.center[1] - Ron[1],
 				light[j]->light.center[2] - Ron[2]
@@ -754,7 +751,7 @@ double* raytrace(double* Ro, double* Rd, Object** objects , int level,int find){
 			normalize(N);
 			double R[3];  
 			reflect(N,Rdn,R);
-			//normalize(R);
+			normalize(R);
 			double V[3] = {Rd[0]-.5,
 				Rd[1]-1.5,
 				Rd[2]-.5};
@@ -767,6 +764,11 @@ double* raytrace(double* Ro, double* Rd, Object** objects , int level,int find){
 			color[1] += frad(light[j], light_distance) * fang(light[j],Rdn) * (diffusevect[1] + specularvect[1]);
 			color[2] += frad(light[j], light_distance) * fang(light[j],Rdn) * (diffusevect[2] + specularvect[2]);
 		
+			color[0] = color[0] * (1 - (reflec+refract));
+			color[1] = color[1] * (1 - (reflec+refract));
+			color[2] = color[2] * (1 - (reflec+refract));
+			
+			
 			if (reflec > 0){
 				double reflectangle[3] = {
 				(V[0] - 2*(V[0]*N[0] + V[1]*N[1] + V[2]*N[2])*N[0])* reflec,
@@ -776,6 +778,12 @@ double* raytrace(double* Ro, double* Rd, Object** objects , int level,int find){
 				color[0] += reflecolor[0];
 				color[1] += reflecolor[1];
 				color[2] += reflecolor[2];
+			}
+			if (refract > 0){
+				//double refractangle[3] = {
+				//(V[0] - 2*(V[0]*N[0] + V[1]*N[1] + V[2]*N[2])*N[0]),
+				//(V[1] - 2*(V[0]*N[0] + V[1]*N[1] + V[2]*N[2])*N[1]),
+				//(V[2] - 2*(V[0]*N[0] + V[1]*N[1] + V[2]*N[2])*N[2])};
 			}
 		// default values  reflectivity = 0 , refractivity = 0 , ior = 1 
 		// shadow code keep it the same it is fine
